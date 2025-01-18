@@ -1,14 +1,5 @@
 <?php
 
-/*
- * This file is part of the Symfony package.
- *
- * (c) Fabien Potencier <fabien@symfony.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace Symfony\Component\Form\Tests\Extension\Core\Type;
 
 use Symfony\Component\Form\Extension\Core\Type\MultiStepType;
@@ -43,7 +34,7 @@ final class MultiStepTypeTest extends TypeTestCase
         self::assertSame('general', $form->createView()->vars['current_step_name']);
     }
 
-    public function testBuildViewHasStepNames(): void
+    public function testBuildViewHasStepNames()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'steps' => [
