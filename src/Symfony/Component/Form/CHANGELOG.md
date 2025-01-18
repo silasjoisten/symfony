@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+7.3
+---
+
+ * Add `MultiStepType` to create multistep forms
+
 7.2
 ---
 
