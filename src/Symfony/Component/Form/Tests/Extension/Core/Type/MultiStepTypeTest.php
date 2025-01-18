@@ -40,10 +40,10 @@ final class MultiStepTypeTest extends TypeTestCase
             ],
         ]);
 
-        self::assertSame('general', $form->createView()->vars['current_step_name']);
+        self::assertSame('general', $form->createView()->vars['current_step']);
     }
 
-    public function testBuildViewHasStepNames()
+    public function testBuildViewHasSteps()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'steps' => [
@@ -53,7 +53,7 @@ final class MultiStepTypeTest extends TypeTestCase
             ],
         ]);
 
-        self::assertSame(['general', 'contact', 'newsletter'], $form->createView()->vars['steps_names']);
+        self::assertSame(['general', 'contact', 'newsletter'], $form->createView()->vars['steps']);
     }
 
     public function testFormOnlyHasCurrentStepForm()
@@ -82,7 +82,8 @@ final class MultiStepTypeTest extends TypeTestCase
 
     public function testFormStepCanBeClassString()
     {
-        $form = $this->factory->create(MultiStepType::class, ['current_step_name' => 'author'], [
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'author',
             'steps' => [
                 'general' => static function (FormBuilderInterface $builder): void {
                     $builder
@@ -104,8 +105,10 @@ final class MultiStepTypeTest extends TypeTestCase
     public function testFormStepWithNormalStringWillThrowException()
     {
         self::expectException(\InvalidArgumentException::class);
+        self::expectExceptionMessage('The form class "hello there" does not exist.');
 
-        $this->factory->create(MultiStepType::class, ['current_step_name' => 'author'], [
+        $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'author',
             'steps' => [
                 'general' => static function (FormBuilderInterface $builder): void {
                     $builder
@@ -125,8 +128,10 @@ final class MultiStepTypeTest extends TypeTestCase
     public function testFormStepWithClassStringNotExtendingAbstractTypeWillThrowException()
     {
         self::expectException(\InvalidArgumentException::class);
+        self::expectExceptionMessage('"stdClass" is not a form type.');
 
-        $this->factory->create(MultiStepType::class, ['current_step_name' => 'author'], [
+        $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'author',
             'steps' => [
                 'general' => static function (FormBuilderInterface $builder): void {
                     $builder
@@ -139,6 +144,22 @@ final class MultiStepTypeTest extends TypeTestCase
                         ->add('city', TextType::class);
                 },
                 'author' => \stdClass::class,
+            ],
+        ]);
+    }
+
+    public function testFormStepsWithInvalidConfiguration()
+    {
+        self::expectException(\InvalidArgumentException::class);
+        self::expectExceptionMessage('The option "steps" must be an associative array.');
+
+        $this->factory->create(MultiStepType::class, [], [
+            'steps' => [
+                1 => static function (FormBuilderInterface $builder): void {
+                    $builder
+                        ->add('firstName', TextType::class)
+                        ->add('lastName', TextType::class);
+                },
             ],
         ]);
     }

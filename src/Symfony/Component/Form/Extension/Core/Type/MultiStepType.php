@@ -28,30 +28,38 @@ final class MultiStepType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver
-            ->setDefault('current_step_name', static function (Options $options): string {
-                return array_key_first($options['steps']);
-            })
-            ->setRequired('steps');
+            ->setRequired('steps')
+            ->setDefault('current_step', static function (Options $options): string {
+                if (!is_string($first = \array_key_first($options['steps']))) {
+                    throw new \InvalidArgumentException('The option "steps" must be an associative array.');
+                }
+
+                return $first;
+            });
     }
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $currentStep = $options['steps'][$options['current_step_name']];
+        $currentStep = $options['steps'][$options['current_step']];
 
         if (\is_callable($currentStep)) {
             $currentStep($builder, $options);
         } elseif (\is_string($currentStep)) {
-            if (!class_exists($currentStep) || !is_a($currentStep, AbstractType::class)) {
+            if (!class_exists($currentStep)) {
                 throw new \InvalidArgumentException(\sprintf('The form class "%s" does not exist.', $currentStep));
             }
 
-            $builder->add($options['current_step_name'], $currentStep, $options);
+            if (!is_subclass_of($currentStep, AbstractType::class)) {
+                throw new \InvalidArgumentException(\sprintf('"%s" is not a form type.', $currentStep));
+            }
+
+            $builder->add($options['current_step'], $currentStep);
         }
     }
 
     public function buildView(FormView $view, FormInterface $form, array $options): void
     {
-        $view->vars['current_step_name'] = $options['current_step_name'];
-        $view->vars['steps_names'] = array_keys($options['steps']);
+        $view->vars['current_step'] = $options['current_step'];
+        $view->vars['steps'] = array_keys($options['steps']);
     }
 }
