@@ -23,14 +23,14 @@ use Symfony\Component\OptionsResolver\Exception\MissingOptionsException;
  */
 final class MultiStepTypeTest extends TypeTestCase
 {
-    public function testConfigureOptionsWithoutStepsThrowsException(): void
+    public function testConfigureOptionsWithoutStepsThrowsException()
     {
         self::expectException(MissingOptionsException::class);
 
         $this->factory->create(MultiStepType::class);
     }
 
-    public function testConfigureOptionsWithStepsSetsDefaultForCurrentStepName(): void
+    public function testConfigureOptionsWithStepsSetsDefaultForCurrentStepName()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'steps' => [
@@ -56,7 +56,7 @@ final class MultiStepTypeTest extends TypeTestCase
         self::assertSame(['general', 'contact', 'newsletter'], $form->createView()->vars['steps_names']);
     }
 
-    public function testFormOnlyHasCurrentStepForm(): void
+    public function testFormOnlyHasCurrentStepForm()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'steps' => [
@@ -80,7 +80,7 @@ final class MultiStepTypeTest extends TypeTestCase
         self::assertArrayNotHasKey('city', $form->createView()->children);
     }
 
-    public function testFormStepCanBeClassString(): void
+    public function testFormStepCanBeClassString()
     {
         $form = $this->factory->create(MultiStepType::class, ['current_step_name' => 'author'], [
             'steps' => [
@@ -101,7 +101,7 @@ final class MultiStepTypeTest extends TypeTestCase
         self::assertArrayHasKey('author', $form->createView()->children);
     }
 
-    public function testFormStepWithNormalStringWillThrowException(): void
+    public function testFormStepWithNormalStringWillThrowException()
     {
         self::expectException(\InvalidArgumentException::class);
 
@@ -122,7 +122,7 @@ final class MultiStepTypeTest extends TypeTestCase
         ]);
     }
 
-    public function testFormStepWithClassStringNotExtendingAbstractTypeWillThrowException(): void
+    public function testFormStepWithClassStringNotExtendingAbstractTypeWillThrowException()
     {
         self::expectException(\InvalidArgumentException::class);
 
