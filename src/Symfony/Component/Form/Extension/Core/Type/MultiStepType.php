@@ -30,7 +30,7 @@ final class MultiStepType extends AbstractType
         $resolver
             ->setRequired('steps')
             ->setDefault('current_step', static function (Options $options): string {
-                if (!is_string($first = \array_key_first($options['steps']))) {
+                if (!\is_string($first = array_key_first($options['steps']))) {
                     throw new \InvalidArgumentException('The option "steps" must be an associative array.');
                 }
 
