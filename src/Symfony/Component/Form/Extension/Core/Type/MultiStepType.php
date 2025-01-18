@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier <fabien@symfony.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 declare(strict_types=1);
 
 /*
@@ -42,9 +51,9 @@ final class MultiStepType extends AbstractType
 
         if (\is_callable($currentStep)) {
             $currentStep($builder, $options);
-        } elseif(\is_string($currentStep)) {
+        } elseif (\is_string($currentStep)) {
             if (!class_exists($currentStep) || !is_a($currentStep, AbstractType::class)) {
-                throw new \InvalidArgumentException(sprintf('The form class "%s" does not exist.', $currentStep));
+                throw new \InvalidArgumentException(\sprintf('The form class "%s" does not exist.', $currentStep));
             }
 
             $builder->add($options['current_step_name'], $currentStep, $options);
