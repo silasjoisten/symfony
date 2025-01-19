@@ -54,7 +54,10 @@ final class MultiStepType extends AbstractType
                 return $value;
             })
             ->setDefault('current_step', static function (Options $options): string {
-                return array_key_first($options['steps']);
+                /** @var string $firstStep */
+                $firstStep = array_key_first($options['steps']);
+
+                return $firstStep;
             });
     }
 
