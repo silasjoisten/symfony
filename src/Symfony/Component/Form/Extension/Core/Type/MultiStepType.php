@@ -15,6 +15,7 @@ use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\FormView;
+use Symfony\Component\OptionsResolver\Exception\InvalidOptionsException;
 use Symfony\Component\OptionsResolver\Options;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -29,15 +30,31 @@ final class MultiStepType extends AbstractType
     {
         $resolver
             ->setRequired('steps')
-            ->setDefault('current_step', static function (Options $options): string {
-                /** @var array<string, mixed> $steps */
-                $steps = $options['steps'];
-                $firstStep = array_key_first($steps);
-                if (!\is_string($firstStep)) {
-                    throw new \InvalidArgumentException('The option "steps" must be an associative array.');
+            ->setAllowedTypes('steps', 'array')
+            ->setAllowedValues('steps', static function (array $steps): bool {
+                foreach ($steps as $key => $step) {
+                    if (!\is_string($key)) {
+                        return false;
+                    }
+
+                    if ((!\is_string($step) || !\is_subclass_of($step, AbstractType::class)) && !\is_callable($step)) {
+                        return false;
+                    }
                 }
 
-                return $firstStep;
+                return true;
+            })
+            ->setRequired('current_step')
+            ->setAllowedTypes('current_step', 'string')
+            ->setNormalizer('current_step', static function (Options $options, string $value): string {
+                if (!\array_key_exists($value, $options['steps'])) {
+                    throw new InvalidOptionsException(\sprintf('The current step "%s" does not exist.', $value));
+                }
+
+                return $value;
+            })
+            ->setDefault('current_step', static function (Options $options): string {
+                return \array_key_first($options['steps']);
             });
     }
 
@@ -48,14 +65,6 @@ final class MultiStepType extends AbstractType
         if (\is_callable($currentStep)) {
             $currentStep($builder, $options);
         } elseif (\is_string($currentStep)) {
-            if (!class_exists($currentStep)) {
-                throw new \InvalidArgumentException(\sprintf('The form class "%s" does not exist.', $currentStep));
-            }
-
-            if (!is_subclass_of($currentStep, AbstractType::class)) {
-                throw new \InvalidArgumentException(\sprintf('"%s" is not a form type.', $currentStep));
-            }
-
             $builder->add($options['current_step'], $currentStep);
         }
     }
@@ -63,6 +72,16 @@ final class MultiStepType extends AbstractType
     public function buildView(FormView $view, FormInterface $form, array $options): void
     {
         $view->vars['current_step'] = $options['current_step'];
-        $view->vars['steps'] = array_keys($options['steps']);
+        $view->vars['steps'] = \array_keys($options['steps']);
+        $view->vars['total_steps_count'] = \count($options['steps']);
+
+        /** @var int $currentStepIndex */
+        $currentStepIndex = \array_search($options['current_step'], \array_keys($options['steps']), true);
+        $view->vars['current_step_number'] = $currentStepIndex + 1;
+        $view->vars['is_first_step'] = $currentStepIndex === 0;
+
+        /** @var int $lastStepIndex */
+        $lastStepIndex = \array_key_last(\array_keys($options['steps']));
+        $view->vars['is_last_step'] = $lastStepIndex === $currentStepIndex;
     }
 }

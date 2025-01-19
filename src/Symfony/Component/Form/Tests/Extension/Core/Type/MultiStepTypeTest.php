@@ -16,6 +16,7 @@ use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\Test\TypeTestCase;
 use Symfony\Component\Form\Tests\Fixtures\AuthorType;
+use Symfony\Component\OptionsResolver\Exception\InvalidOptionsException;
 use Symfony\Component\OptionsResolver\Exception\MissingOptionsException;
 
 /**
@@ -30,35 +31,98 @@ final class MultiStepTypeTest extends TypeTestCase
         $this->factory->create(MultiStepType::class);
     }
 
-    public function testConfigureOptionsWithStepsSetsDefaultForCurrentStepName()
+    /**
+     * @dataProvider invalidStepValues
+     */
+    public function testConfigureOptionsStepsMustBeArray(mixed $steps)
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => $steps]);
+    }
+
+    /**
+     * @return iterable<string, array<int, array<string, mixed>>>
+     */
+    public static function invalidStepValues(): iterable
+    {
+        yield 'Steps is string' => ['hello there'];
+        yield 'Steps is int' => [3];
+        yield 'Steps is null' => [null];
+    }
+
+    /**
+     * @dataProvider invalidSteps
+     *
+     * @param array<string, mixed> $steps
+     */
+    public function testConfigureOptionsMustBeClassStringOrCallable(array $steps)
+    {
+        self::expectException(InvalidOptionsException::class);
+        self::expectExceptionMessage('The option "steps" with value array is invalid.');
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => $steps]);
+    }
+
+    /**
+     * @return iterable<string, array<int, array<string, mixed>>>
+     */
+    public static function invalidSteps(): iterable
+    {
+        yield 'Steps with invalid string value' => [['step1' => static function (): void {}, 'step2' => 'hello there']];
+        yield 'Steps with invalid class value' => [['step1' => static function (): void {}, 'step2' => \stdClass::class]];
+        yield 'Steps with array value' => [['step1' => static function (): void {}, 'step2' => []]];
+        yield 'Steps with null value' => [['step1' => null]];
+        yield 'Steps with int value' => [['step1' => 4]];
+        yield 'Steps as non associative array' => [[0 => static function(): void {}]];
+    }
+
+    /**
+     * @dataProvider invalidStepNames
+     */
+    public function testConfigureOptionsStepNameMustBeString(mixed $steps)
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}], 'current_step' => $steps]);
+    }
+
+    /**
+     * @return iterable<string, array<int, array<string, mixed>>>
+     */
+    public static function invalidStepNames(): iterable
+    {
+        yield 'Step name is int' => [3];
+        yield 'Step name is bool' => [false];
+        yield 'Step name is callable' => [static function (): void {}];
+    }
+
+    public function testConfigureOptionsStepNameMustExistInSteps()
+    {
+        self::expectException(InvalidOptionsException::class);
+        self::expectExceptionMessage('The current step "step2" does not exist.');
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}], 'current_step' => 'step2']);
+    }
+
+
+    public function testConfigureOptionsSetsDefaultValueForCurrentStepName()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'steps' => [
-                'general' => static function (): void {},
-                'contact' => static function (): void {},
-                'newsletter' => static function (): void {},
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
             ],
         ]);
 
-        self::assertSame('general', $form->createView()->vars['current_step']);
+        self::assertSame('step1', $form->createView()->vars['current_step']);
     }
 
-    public function testBuildViewHasSteps()
+    public function testBuildFormStepCanBeCallable()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
-            'steps' => [
-                'general' => static function (): void {},
-                'contact' => static function (): void {},
-                'newsletter' => static function (): void {},
-            ],
-        ]);
-
-        self::assertSame(['general', 'contact', 'newsletter'], $form->createView()->vars['steps']);
-    }
-
-    public function testFormOnlyHasCurrentStepForm()
-    {
-        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'contact',
             'steps' => [
                 'general' => static function (FormBuilderInterface $builder): void {
                     $builder
@@ -70,17 +134,14 @@ final class MultiStepTypeTest extends TypeTestCase
                         ->add('address', TextType::class)
                         ->add('city', TextType::class);
                 },
-                'newsletter' => static function (): void {},
             ],
         ]);
 
-        self::assertArrayHasKey('firstName', $form->createView()->children);
-        self::assertArrayHasKey('lastName', $form->createView()->children);
-        self::assertArrayNotHasKey('address', $form->createView()->children);
-        self::assertArrayNotHasKey('city', $form->createView()->children);
+        self::assertArrayHasKey('address', $form->createView()->children);
+        self::assertArrayHasKey('city', $form->createView()->children);
     }
 
-    public function testFormStepCanBeClassString()
+    public function testBuildFormStepCanBeClassString()
     {
         $form = $this->factory->create(MultiStepType::class, [], [
             'current_step' => 'author',
@@ -89,11 +150,6 @@ final class MultiStepTypeTest extends TypeTestCase
                     $builder
                         ->add('firstName', TextType::class)
                         ->add('lastName', TextType::class);
-                },
-                'contact' => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('address', TextType::class)
-                        ->add('city', TextType::class);
                 },
                 'author' => AuthorType::class,
             ],
@@ -102,65 +158,60 @@ final class MultiStepTypeTest extends TypeTestCase
         self::assertArrayHasKey('author', $form->createView()->children);
     }
 
-    public function testFormStepWithNormalStringWillThrowException()
+    public function testBuildView()
     {
-        self::expectException(\InvalidArgumentException::class);
-        self::expectExceptionMessage('The form class "hello there" does not exist.');
-
-        $this->factory->create(MultiStepType::class, [], [
-            'current_step' => 'author',
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'contact',
             'steps' => [
-                'general' => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('firstName', TextType::class)
-                        ->add('lastName', TextType::class);
-                },
-                'contact' => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('address', TextType::class)
-                        ->add('city', TextType::class);
-                },
-                'author' => 'hello there',
+                'contact' => static function (): void {},
+                'general' => static function (): void {},
+                'newsletter' => static function (): void {},
             ],
         ]);
+
+        self::assertSame('contact', $form->createView()->vars['current_step']);
+        self::assertSame(['contact', 'general', 'newsletter'], $form->createView()->vars['steps']);
+        self::assertSame(3, $form->createView()->vars['total_steps_count']);
+        self::assertSame(1, $form->createView()->vars['current_step_number']);
+        self::assertTrue($form->createView()->vars['is_first_step']);
+        self::assertFalse($form->createView()->vars['is_last_step']);
     }
 
-    public function testFormStepWithClassStringNotExtendingAbstractTypeWillThrowException()
+    public function testBuildViewIsLastStep()
     {
-        self::expectException(\InvalidArgumentException::class);
-        self::expectExceptionMessage('"stdClass" is not a form type.');
-
-        $this->factory->create(MultiStepType::class, [], [
-            'current_step' => 'author',
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'newsletter',
             'steps' => [
-                'general' => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('firstName', TextType::class)
-                        ->add('lastName', TextType::class);
-                },
-                'contact' => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('address', TextType::class)
-                        ->add('city', TextType::class);
-                },
-                'author' => \stdClass::class,
+                'contact' => static function (): void {},
+                'general' => static function (): void {},
+                'newsletter' => static function (): void {},
             ],
         ]);
+
+        self::assertSame('newsletter', $form->createView()->vars['current_step']);
+        self::assertSame(['contact', 'general', 'newsletter'], $form->createView()->vars['steps']);
+        self::assertSame(3, $form->createView()->vars['total_steps_count']);
+        self::assertSame(3, $form->createView()->vars['current_step_number']);
+        self::assertFalse($form->createView()->vars['is_first_step']);
+        self::assertTrue($form->createView()->vars['is_last_step']);
     }
 
-    public function testFormStepsWithInvalidConfiguration()
+    public function testBuildViewStepIsNotLastAndNotFirst()
     {
-        self::expectException(\InvalidArgumentException::class);
-        self::expectExceptionMessage('The option "steps" must be an associative array.');
-
-        $this->factory->create(MultiStepType::class, [], [
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'general',
             'steps' => [
-                1 => static function (FormBuilderInterface $builder): void {
-                    $builder
-                        ->add('firstName', TextType::class)
-                        ->add('lastName', TextType::class);
-                },
+                'contact' => static function (): void {},
+                'general' => static function (): void {},
+                'newsletter' => static function (): void {},
             ],
         ]);
+
+        self::assertSame('general', $form->createView()->vars['current_step']);
+        self::assertSame(['contact', 'general', 'newsletter'], $form->createView()->vars['steps']);
+        self::assertSame(3, $form->createView()->vars['total_steps_count']);
+        self::assertSame(2, $form->createView()->vars['current_step_number']);
+        self::assertFalse($form->createView()->vars['is_first_step']);
+        self::assertFalse($form->createView()->vars['is_last_step']);
     }
 }
