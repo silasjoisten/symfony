@@ -74,7 +74,7 @@ final class MultiStepTypeTest extends TypeTestCase
         yield 'Steps with array value' => [['step1' => static function (): void {}, 'step2' => []]];
         yield 'Steps with null value' => [['step1' => null]];
         yield 'Steps with int value' => [['step1' => 4]];
-        yield 'Steps as non associative array' => [[0 => static function(): void {}]];
+        yield 'Steps as non associative array' => [[0 => static function (): void {}]];
     }
 
     /**
@@ -104,7 +104,6 @@ final class MultiStepTypeTest extends TypeTestCase
 
         $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}], 'current_step' => 'step2']);
     }
-
 
     public function testConfigureOptionsSetsDefaultValueForCurrentStepName()
     {

@@ -37,7 +37,7 @@ final class MultiStepType extends AbstractType
                         return false;
                     }
 
-                    if ((!\is_string($step) || !\is_subclass_of($step, AbstractType::class)) && !\is_callable($step)) {
+                    if ((!\is_string($step) || !is_subclass_of($step, AbstractType::class)) && !\is_callable($step)) {
                         return false;
                     }
                 }
@@ -54,7 +54,7 @@ final class MultiStepType extends AbstractType
                 return $value;
             })
             ->setDefault('current_step', static function (Options $options): string {
-                return \array_key_first($options['steps']);
+                return array_key_first($options['steps']);
             });
     }
 
@@ -72,16 +72,16 @@ final class MultiStepType extends AbstractType
     public function buildView(FormView $view, FormInterface $form, array $options): void
     {
         $view->vars['current_step'] = $options['current_step'];
-        $view->vars['steps'] = \array_keys($options['steps']);
+        $view->vars['steps'] = array_keys($options['steps']);
         $view->vars['total_steps_count'] = \count($options['steps']);
 
         /** @var int $currentStepIndex */
-        $currentStepIndex = \array_search($options['current_step'], \array_keys($options['steps']), true);
+        $currentStepIndex = array_search($options['current_step'], array_keys($options['steps']), true);
         $view->vars['current_step_number'] = $currentStepIndex + 1;
-        $view->vars['is_first_step'] = $currentStepIndex === 0;
+        $view->vars['is_first_step'] = 0 === $currentStepIndex;
 
         /** @var int $lastStepIndex */
-        $lastStepIndex = \array_key_last(\array_keys($options['steps']));
+        $lastStepIndex = array_key_last(array_keys($options['steps']));
         $view->vars['is_last_step'] = $lastStepIndex === $currentStepIndex;
     }
 }
