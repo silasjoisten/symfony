@@ -58,7 +58,56 @@ final class MultiStepType extends AbstractType
                 $firstStep = array_key_first($options['steps']);
 
                 return $firstStep;
+            })
+            ->setRequired('next_step')
+            ->setAllowedTypes('next_step', ['string', 'null'])
+            ->setDefault('next_step', function (Options $options): ?string {
+                return array_keys($options['steps'])[$this->currentStepIndex($options['current_step'], $options['steps']) + 1] ?? null;
+            })
+            ->setNormalizer('next_step', static function (Options $options, ?string $value): ?string {
+                if (null === $value) {
+                    return null;
+                }
+
+                if (!\array_key_exists($value, $options['steps'])) {
+                    throw new InvalidOptionsException(\sprintf('The next step "%s" does not exist.', $value));
+                }
+
+                return $value;
+            })
+            ->setRequired('previous_step')
+            ->setAllowedTypes('previous_step', ['string', 'null'])
+            ->setDefault('previous_step', function (Options $options): ?string {
+                return array_keys($options['steps'])[$this->currentStepIndex($options['current_step'], $options['steps']) - 1] ?? null;
+            })
+            ->setNormalizer('previous_step', static function (Options $options, ?string $value): ?string {
+                if (null === $value) {
+                    return null;
+                }
+
+                if (!\array_key_exists($value, $options['steps'])) {
+                    throw new InvalidOptionsException(\sprintf('The previous step "%s" does not exist.', $value));
+                }
+
+                return $value;
             });
+
+        $resolver->setDefaults([
+            'hide_back_button_on_first_step' => false,
+            'button_back_options' => [
+                'label' => 'Back',
+            ],
+            'button_next_options' => [
+                'label' => 'Next',
+            ],
+            'button_submit_options' => [
+                'label' => 'Finish',
+            ],
+        ]);
+
+        $resolver->setAllowedTypes('hide_back_button_on_first_step', 'bool');
+        $resolver->setAllowedTypes('button_back_options', 'array');
+        $resolver->setAllowedTypes('button_submit_options', 'array');
     }
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
@@ -70,6 +119,18 @@ final class MultiStepType extends AbstractType
         } elseif (\is_string($currentStep)) {
             $builder->add($options['current_step'], $currentStep);
         }
+
+        $builder->add('back', SubmitType::class, [
+            'disabled' => $this->isFirstStep($options['current_step'], $options['steps']),
+            'validate' => false,
+            ...$options['button_back_options'],
+        ]);
+
+        if ($this->isFirstStep($options['current_step'], $options['steps']) && true === $options['hide_back_button_on_first_step']) {
+            $builder->remove('back');
+        }
+
+        $builder->add('submit', SubmitType::class, $this->isLastStep($options['current_step'], $options['steps']) ? $options['button_submit_options'] : $options['button_next_options']);
     }
 
     public function buildView(FormView $view, FormInterface $form, array $options): void
@@ -77,14 +138,37 @@ final class MultiStepType extends AbstractType
         $view->vars['current_step'] = $options['current_step'];
         $view->vars['steps'] = array_keys($options['steps']);
         $view->vars['total_steps_count'] = \count($options['steps']);
+        $view->vars['current_step_number'] = $this->currentStepIndex($options['current_step'], $options['steps']) + 1;
+        $view->vars['is_first_step'] = $this->isFirstStep($options['current_step'], $options['steps']);
+        $view->vars['is_last_step'] = $this->isLastStep($options['current_step'], $options['steps']);
+        $view->vars['previous_step'] = $options['previous_step'];
+        $view->vars['next_step'] = $options['next_step'];
+    }
 
-        /** @var int $currentStepIndex */
-        $currentStepIndex = array_search($options['current_step'], array_keys($options['steps']), true);
-        $view->vars['current_step_number'] = $currentStepIndex + 1;
-        $view->vars['is_first_step'] = 0 === $currentStepIndex;
+    /**
+     * @param array<string, mixed> $steps
+     */
+    private function currentStepIndex(string $currentStep, array $steps): int
+    {
+        /** @var int $currentStep */
+        $currentStep = array_search($currentStep, array_keys($steps), true);
 
-        /** @var int $lastStepIndex */
-        $lastStepIndex = array_key_last(array_keys($options['steps']));
-        $view->vars['is_last_step'] = $lastStepIndex === $currentStepIndex;
+        return $currentStep;
+    }
+
+    /**
+     * @param array<string, mixed> $steps
+     */
+    private function isLastStep(string $currentStep, array $steps): bool
+    {
+        return array_key_last(array_keys($steps)) === $this->currentStepIndex($currentStep, $steps);
+    }
+
+    /**
+     * @param array<string, mixed> $steps
+     */
+    private function isFirstStep(string $currentStep, array $steps): bool
+    {
+        return 0 === $this->currentStepIndex($currentStep, $steps);
     }
 }

@@ -56,7 +56,7 @@ final class MultiStepTypeTest extends TypeTestCase
      *
      * @param array<string, mixed> $steps
      */
-    public function testConfigureOptionsMustBeClassStringOrCallable(array $steps)
+    public function testConfigureOptionsStepsMustBeClassStringOrCallable(array $steps)
     {
         self::expectException(InvalidOptionsException::class);
         self::expectExceptionMessage('The option "steps" with value array is invalid.');
@@ -80,7 +80,7 @@ final class MultiStepTypeTest extends TypeTestCase
     /**
      * @dataProvider invalidStepNames
      */
-    public function testConfigureOptionsStepNameMustBeString(mixed $steps)
+    public function testConfigureOptionsCurrentStepMustBeString(mixed $steps)
     {
         self::expectException(InvalidOptionsException::class);
 
@@ -97,12 +97,118 @@ final class MultiStepTypeTest extends TypeTestCase
         yield 'Step name is callable' => [static function (): void {}];
     }
 
-    public function testConfigureOptionsStepNameMustExistInSteps()
+    public function testConfigureOptionsCurrentStepMustExistInSteps()
     {
         self::expectException(InvalidOptionsException::class);
         self::expectExceptionMessage('The current step "step2" does not exist.');
 
         $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}], 'current_step' => 'step2']);
+    }
+
+    /**
+     * @dataProvider invalidStepNames
+     */
+    public function testConfigureOptionsNextStepMustBeStringOrNull(mixed $steps)
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}, 'step2' => static function (): void {}], 'next_step' => $steps]);
+    }
+
+    public function testNextStepDefault()
+    {
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step1',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
+
+        self::assertSame('step2', $form->getConfig()->getOption('next_step'));
+    }
+
+    public function testNextStepDefaultNullWhenNoNextStepsAvailable()
+    {
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step3',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
+
+        self::assertNull($form->getConfig()->getOption('next_step'));
+    }
+
+    public function testNextStepMustBeNullOrInSteps()
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step1',
+            'next_step' => 'step20',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
+    }
+
+    /**
+     * @dataProvider invalidStepNames
+     */
+    public function testConfigureOptionsPreviousStepMustBeStringOrNull(mixed $steps)
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], ['steps' => ['step1' => static function (): void {}, 'step2' => static function (): void {}], 'previous_step' => $steps]);
+    }
+
+    public function testPreviousStepDefault()
+    {
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step2',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
+
+        self::assertSame('step1', $form->getConfig()->getOption('previous_step'));
+    }
+
+    public function testPreviousStepDefaultNullWhenNoNextStepsAvailable()
+    {
+        $form = $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step1',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
+
+        self::assertNull($form->getConfig()->getOption('previous_step'));
+    }
+
+    public function testPreviousStepMustBeNullOrInSteps()
+    {
+        self::expectException(InvalidOptionsException::class);
+
+        $this->factory->create(MultiStepType::class, [], [
+            'current_step' => 'step1',
+            'previous_step' => 'step20',
+            'steps' => [
+                'step1' => static function (): void {},
+                'step2' => static function (): void {},
+                'step3' => static function (): void {},
+            ],
+        ]);
     }
 
     public function testConfigureOptionsSetsDefaultValueForCurrentStepName()
