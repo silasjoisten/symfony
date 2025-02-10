@@ -112,7 +112,10 @@ use Symfony\Component\Lock\PersistingStoreInterface;
 use Symfony\Component\Lock\Store\StoreFactory;
 use Symfony\Component\Mailer\Bridge as MailerBridge;
 use Symfony\Component\Mailer\Command\MailerTestCommand;
+use Symfony\Component\Mailer\EventListener\DkimSignedMessageListener;
 use Symfony\Component\Mailer\EventListener\MessengerTransportListener;
+use Symfony\Component\Mailer\EventListener\SmimeEncryptedMessageListener;
+use Symfony\Component\Mailer\EventListener\SmimeSignedMessageListener;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mercure\HubRegistry;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -120,6 +123,7 @@ use Symfony\Component\Messenger\Bridge as MessengerBridge;
 use Symfony\Component\Messenger\Handler\BatchHandlerInterface;
 use Symfony\Component\Messenger\MessageBus;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\Component\Messenger\Middleware\DeduplicateMiddleware;
 use Symfony\Component\Messenger\Middleware\RouterContextMiddleware;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use Symfony\Component\Messenger\Transport\TransportFactoryInterface as MessengerTransportFactoryInterface;
@@ -155,6 +159,7 @@ use Symfony\Component\Scheduler\Attribute\AsCronTask;
 use Symfony\Component\Scheduler\Attribute\AsPeriodicTask;
 use Symfony\Component\Scheduler\Attribute\AsSchedule;
 use Symfony\Component\Scheduler\Messenger\SchedulerTransportFactory;
+use Symfony\Component\Scheduler\Messenger\Serializer\Normalizer\SchedulerTriggerNormalizer;
 use Symfony\Component\Security\Core\AuthenticationEvents;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -170,6 +175,7 @@ use Symfony\Component\Serializer\Mapping\Loader\YamlFileLoader;
 use Symfony\Component\Serializer\NameConverter\SnakeCaseToCamelCaseNameConverter;
 use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
+use Symfony\Component\Serializer\Normalizer\NumberNormalizer;
 use Symfony\Component\Serializer\Serializer;
 use Symfony\Component\Stopwatch\Stopwatch;
 use Symfony\Component\String\LazyString;
@@ -535,7 +541,7 @@ class FrameworkExtension extends Extension
 
         // messenger depends on validation being registered
         if ($messengerEnabled) {
-            $this->registerMessengerConfiguration($config['messenger'], $container, $loader, $this->readConfigEnabled('validation', $container, $config['validation']));
+            $this->registerMessengerConfiguration($config['messenger'], $container, $loader, $this->readConfigEnabled('validation', $container, $config['validation']), $this->readConfigEnabled('lock', $container, $config['lock']));
         } else {
             $container->removeDefinition('console.command.messenger_consume_messages');
             $container->removeDefinition('console.command.messenger_stats');
@@ -610,8 +616,12 @@ class FrameworkExtension extends Extension
             ->addTag('assets.package');
         $container->registerForAutoconfiguration(AssetCompilerInterface::class)
             ->addTag('asset_mapper.compiler');
-        $container->registerAttributeForAutoconfiguration(AsCommand::class, static function (ChildDefinition $definition, AsCommand $attribute, \ReflectionClass $reflector): void {
-            $definition->addTag('console.command', ['command' => $attribute->name, 'description' => $attribute->description ?? $reflector->getName()]);
+        $container->registerAttributeForAutoconfiguration(AsCommand::class, static function (ChildDefinition $definition, AsCommand $attribute): void {
+            $definition->addTag('console.command', [
+                'command' => $attribute->name,
+                'description' => $attribute->description,
+                'help' => $attribute->help ?? null,
+            ]);
         });
         $container->registerForAutoconfiguration(Command::class)
             ->addTag('console.command');
@@ -746,8 +756,11 @@ class FrameworkExtension extends Extension
                 }
             );
         }
-        $container->registerAttributeForAutoconfiguration(JsonEncodable::class, static function (ChildDefinition $definition): void {
-            $definition->addTag('json_encoder.encodable');
+        $container->registerAttributeForAutoconfiguration(JsonEncodable::class, static function (ChildDefinition $definition, JsonEncodable $attribute): void {
+            $definition->addTag('json_encoder.encodable', [
+                'object' => $attribute->asObject,
+                'list' => $attribute->asList,
+            ]);
             $definition->addTag('container.excluded');
         });
 
@@ -1715,6 +1728,10 @@ class FrameworkExtension extends Extension
             $validatorBuilder->addMethodCall('setMappingCache', [new Reference('validator.mapping.cache.adapter')]);
         }
 
+        if ($config['disable_translation'] ?? false) {
+            $validatorBuilder->addMethodCall('disableTranslation');
+        }
+
         $container->setParameter('validator.auto_mapping', $config['auto_mapping']);
         if (!$propertyInfoEnabled || !class_exists(PropertyInfoLoader::class)) {
             $container->removeDefinition('validator.property_info_loader');
@@ -1924,6 +1941,11 @@ class FrameworkExtension extends Extension
 
         if (!class_exists(Headers::class)) {
             $container->removeDefinition('serializer.normalizer.mime_message');
+        }
+
+        // BC layer Serializer < 7.3
+        if (!class_exists(NumberNormalizer::class)) {
+            $container->removeDefinition('serializer.normalizer.number');
         }
 
         // BC layer Serializer < 7.2
@@ -2202,9 +2224,14 @@ class FrameworkExtension extends Extension
         if (!$this->hasConsole()) {
             $container->removeDefinition('console.command.scheduler_debug');
         }
+
+        // BC layer Scheduler < 7.3
+        if (!class_exists(SchedulerTriggerNormalizer::class)) {
+            $container->removeDefinition('serializer.normalizer.scheduler_trigger');
+        }
     }
 
-    private function registerMessengerConfiguration(array $config, ContainerBuilder $container, PhpFileLoader $loader, bool $validationEnabled): void
+    private function registerMessengerConfiguration(array $config, ContainerBuilder $container, PhpFileLoader $loader, bool $validationEnabled, bool $lockEnabled): void
     {
         if (!interface_exists(MessageBusInterface::class)) {
             throw new LogicException('Messenger support cannot be enabled as the Messenger component is not installed. Try running "composer require symfony/messenger".');
@@ -2259,6 +2286,13 @@ class FrameworkExtension extends Extension
                 ['id' => 'handle_message'],
             ],
         ];
+
+        if ($lockEnabled && class_exists(DeduplicateMiddleware::class) && class_exists(LockFactory::class)) {
+            $defaultMiddleware['before'][] = ['id' => 'deduplicate_middleware'];
+        } else {
+            $container->removeDefinition('messenger.middleware.deduplicate_middleware');
+        }
+
         foreach ($config['buses'] as $busId => $bus) {
             $middleware = $bus['middleware'];
 
@@ -2828,6 +2862,48 @@ class FrameworkExtension extends Extension
 
         if (!class_exists(MessengerTransportListener::class)) {
             $container->removeDefinition('mailer.messenger_transport_listener');
+        }
+
+        if ($config['dkim_signer']['enabled']) {
+            if (!class_exists(DkimSignedMessageListener::class)) {
+                throw new LogicException('DKIM signed messages support cannot be enabled as this version of the Mailer component does not support it.');
+            }
+            $dkimSigner = $container->getDefinition('mailer.dkim_signer');
+            $dkimSigner->setArgument(0, $config['dkim_signer']['key']);
+            $dkimSigner->setArgument(1, $config['dkim_signer']['domain']);
+            $dkimSigner->setArgument(2, $config['dkim_signer']['select']);
+            $dkimSigner->setArgument(3, $config['dkim_signer']['options']);
+            $dkimSigner->setArgument(4, $config['dkim_signer']['passphrase']);
+        } else {
+            $container->removeDefinition('mailer.dkim_signer');
+            $container->removeDefinition('mailer.dkim_signer.listener');
+        }
+
+        if ($config['smime_signer']['enabled']) {
+            if (!class_exists(SmimeSignedMessageListener::class)) {
+                throw new LogicException('SMIME signed messages support cannot be enabled as this version of the Mailer component does not support it.');
+            }
+            $smimeSigner = $container->getDefinition('mailer.smime_signer');
+            $smimeSigner->setArgument(0, $config['smime_signer']['key']);
+            $smimeSigner->setArgument(1, $config['smime_signer']['certificate']);
+            $smimeSigner->setArgument(2, $config['smime_signer']['passphrase']);
+            $smimeSigner->setArgument(3, $config['smime_signer']['extra_certificates']);
+            $smimeSigner->setArgument(4, $config['smime_signer']['sign_options']);
+        } else {
+            $container->removeDefinition('mailer.smime_signer');
+            $container->removeDefinition('mailer.smime_signer.listener');
+        }
+
+        if ($config['smime_encrypter']['enabled']) {
+            if (!class_exists(SmimeEncryptedMessageListener::class)) {
+                throw new LogicException('S/MIME encrypted messages support cannot be enabled as this version of the Mailer component does not support it.');
+            }
+            $smimeDecrypter = $container->getDefinition('mailer.smime_encrypter');
+            $smimeDecrypter->setArgument(0, $config['smime_encrypter']['certificate']);
+            $smimeDecrypter->setArgument(1, $config['smime_encrypter']['cipher']);
+        } else {
+            $container->removeDefinition('mailer.smime_encrypter');
+            $container->removeDefinition('mailer.smime_encrypter.listener');
         }
 
         if ($webhookEnabled) {

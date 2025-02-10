@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+7.3
+---
+
+ * Add `SentForRetryStamp` that identifies whether a failed message was sent for retry
+ * Add `Symfony\Component\Messenger\Middleware\DeduplicateMiddleware` and `Symfony\Component\Messenger\Stamp\DeduplicateStamp`
+
 7.2
 ---
 

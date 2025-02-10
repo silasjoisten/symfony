@@ -36,6 +36,8 @@ use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\UserProviderInterface;
 use Symfony\Component\Security\Http\Firewall\ContextListener;
+use Symfony\Component\Security\Http\Tests\Fixtures\CustomUser;
+use Symfony\Component\Security\Http\Tests\Fixtures\NullUserToken;
 use Symfony\Contracts\Service\ServiceLocatorTrait;
 
 class ContextListenerTest extends TestCase
@@ -56,6 +58,30 @@ class ContextListenerTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('User provider "stdClass" must implement "Symfony\Component\Security\Core\User\UserProviderInterface');
         $this->handleEventWithPreviousSession([new \stdClass()]);
+    }
+
+    public function testTokenReturnsNullUser()
+    {
+        $tokenStorage = new TokenStorage();
+        $tokenStorage->setToken(new NullUserToken());
+
+        $session = new Session(new MockArraySessionStorage());
+        $session->set('_security_context_key', serialize($tokenStorage->getToken()));
+
+        $request = new Request();
+        $request->setSession($session);
+        $request->cookies->set('MOCKSESSID', true);
+
+        $listener = new ContextListener($tokenStorage, [], 'context_key');
+
+        $this->expectException(\UnexpectedValueException::class);
+        $this->expectExceptionMessage('Cannot authenticate a "Symfony\Component\Security\Http\Tests\Fixtures\NullUserToken" token because it doesn\'t store a user.');
+
+        $listener->authenticate(new RequestEvent(
+            $this->createMock(HttpKernelInterface::class),
+            $request,
+            HttpKernelInterface::MAIN_REQUEST,
+        ));
     }
 
     public function testOnKernelResponseWillAddSession()
@@ -351,6 +377,30 @@ class ContextListenerTest extends TestCase
         $this->assertEmpty($dispatcher->getListeners());
     }
 
+    /**
+     * @testWith [true]
+     *           [false]
+     *           [null]
+     */
+    public function testNullOrHashedPasswordInSessionDoesntInvalidateTheToken(?bool $hashPassword)
+    {
+        $user = new CustomUser('user', ['ROLE_USER'], 'pass', $hashPassword);
+
+        $userProvider = $this->createMock(UserProviderInterface::class);
+        $userProvider->expects($this->once())
+            ->method('supportsClass')
+            ->with(CustomUser::class)
+            ->willReturn(true);
+        $userProvider->expects($this->once())
+            ->method('refreshUser')
+            ->willReturn($user);
+
+        $tokenStorage = $this->handleEventWithPreviousSession([$userProvider], $user);
+
+        $this->assertInstanceOf(UsernamePasswordToken::class, $tokenStorage->getToken());
+        $this->assertSame($user, $tokenStorage->getToken()->getUser());
+    }
+
     protected function runSessionOnKernelResponse($newToken, $original = null)
     {
         $session = new Session(new MockArraySessionStorage());
@@ -518,19 +568,9 @@ class CustomToken implements TokenInterface
         return [$this->user, $this->roles];
     }
 
-    public function serialize(): string
-    {
-        return serialize($this->__serialize());
-    }
-
     public function __unserialize(array $data): void
     {
         [$this->user, $this->roles] = $data;
-    }
-
-    public function unserialize($serialized)
-    {
-        $this->__unserialize(\is_array($serialized) ? $serialized : unserialize($serialized));
     }
 
     public function __toString(): string
@@ -541,10 +581,6 @@ class CustomToken implements TokenInterface
     public function getRoleNames(): array
     {
         return $this->roles;
-    }
-
-    public function getCredentials()
-    {
     }
 
     public function getUser(): UserInterface
@@ -562,6 +598,7 @@ class CustomToken implements TokenInterface
         return $this->getUserIdentifier();
     }
 
+    #[\Deprecated]
     public function eraseCredentials(): void
     {
     }

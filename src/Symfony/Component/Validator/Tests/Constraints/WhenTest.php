@@ -13,6 +13,7 @@ namespace Symfony\Component\Validator\Tests\Constraints;
 
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Validator\Constraints\Callback;
+use Symfony\Component\Validator\Constraints\Length;
 use Symfony\Component\Validator\Constraints\NotBlank;
 use Symfony\Component\Validator\Constraints\NotNull;
 use Symfony\Component\Validator\Constraints\When;
@@ -24,6 +25,9 @@ use Symfony\Component\Validator\Tests\Constraints\Fixtures\WhenTestWithAttribute
 
 final class WhenTest extends TestCase
 {
+    /**
+     * @group legacy
+     */
     public function testMissingOptionsExceptionIsThrown()
     {
         $this->expectException(MissingOptionsException::class);
@@ -51,24 +55,22 @@ final class WhenTest extends TestCase
         self::assertInstanceOf(When::class, $classConstraint);
         self::assertSame('true', $classConstraint->expression);
         self::assertEquals([
-            new Callback([
-                'callback' => 'callback',
-                'groups' => ['Default', 'WhenTestWithAttributes'],
-            ]),
+            new Callback(
+                callback: 'callback',
+                groups: ['Default', 'WhenTestWithAttributes'],
+            ),
         ], $classConstraint->constraints);
+        self::assertEmpty($classConstraint->otherwise);
 
         [$fooConstraint] = $metadata->properties['foo']->getConstraints();
 
         self::assertInstanceOf(When::class, $fooConstraint);
         self::assertSame('true', $fooConstraint->expression);
         self::assertEquals([
-            new NotNull([
-                'groups' => ['Default', 'WhenTestWithAttributes'],
-            ]),
-            new NotBlank([
-                'groups' => ['Default', 'WhenTestWithAttributes'],
-            ]),
+            new NotNull(groups: ['Default', 'WhenTestWithAttributes']),
+            new NotBlank(groups: ['Default', 'WhenTestWithAttributes']),
         ], $fooConstraint->constraints);
+        self::assertEmpty($fooConstraint->otherwise);
         self::assertSame(['Default', 'WhenTestWithAttributes'], $fooConstraint->groups);
 
         [$barConstraint] = $metadata->properties['bar']->getConstraints();
@@ -76,24 +78,18 @@ final class WhenTest extends TestCase
         self::assertInstanceOf(When::class, $fooConstraint);
         self::assertSame('false', $barConstraint->expression);
         self::assertEquals([
-            new NotNull([
-                'groups' => ['foo'],
-            ]),
-            new NotBlank([
-                'groups' => ['foo'],
-            ]),
+            new NotNull(groups: ['foo']),
+            new NotBlank(groups: ['foo']),
         ], $barConstraint->constraints);
+        self::assertEmpty($barConstraint->otherwise);
         self::assertSame(['foo'], $barConstraint->groups);
 
         [$quxConstraint] = $metadata->properties['qux']->getConstraints();
 
         self::assertInstanceOf(When::class, $quxConstraint);
         self::assertSame('true', $quxConstraint->expression);
-        self::assertEquals([
-            new NotNull([
-                'groups' => ['foo'],
-            ]),
-        ], $quxConstraint->constraints);
+        self::assertEquals([new NotNull(groups: ['foo'])], $quxConstraint->constraints);
+        self::assertEmpty($quxConstraint->otherwise);
         self::assertSame(['foo'], $quxConstraint->groups);
 
         [$bazConstraint] = $metadata->getters['baz']->getConstraints();
@@ -101,13 +97,18 @@ final class WhenTest extends TestCase
         self::assertInstanceOf(When::class, $bazConstraint);
         self::assertSame('true', $bazConstraint->expression);
         self::assertEquals([
-            new NotNull([
-                'groups' => ['Default', 'WhenTestWithAttributes'],
-            ]),
-            new NotBlank([
-                'groups' => ['Default', 'WhenTestWithAttributes'],
-            ]),
+            new NotNull(groups: ['Default', 'WhenTestWithAttributes']),
+            new NotBlank(groups: ['Default', 'WhenTestWithAttributes']),
         ], $bazConstraint->constraints);
+        self::assertEmpty($bazConstraint->otherwise);
         self::assertSame(['Default', 'WhenTestWithAttributes'], $bazConstraint->groups);
+
+        [$quuxConstraint] = $metadata->properties['quux']->getConstraints();
+
+        self::assertInstanceOf(When::class, $quuxConstraint);
+        self::assertSame('true', $quuxConstraint->expression);
+        self::assertEquals([new NotNull(groups: ['foo'])], $quuxConstraint->constraints);
+        self::assertEquals([new Length(exactly: 10, groups: ['foo'])], $quuxConstraint->otherwise);
+        self::assertSame(['foo'], $quuxConstraint->groups);
     }
 }

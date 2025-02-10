@@ -274,9 +274,12 @@ final class BlueskyTransportTest extends TransportTestCase
         $this->assertEquals($expected, $this->parseFacets($input));
     }
 
-    public function testWithMedia()
+    /**
+     * @dataProvider sendMessageWithEmbedDataProvider
+     */
+    public function testWithEmbed(BlueskyOptions $blueskyOptions, string $expectedJsonResponse)
     {
-        $transport = $this->createTransport(new MockHttpClient((function () {
+        $transport = $this->createTransport(new MockHttpClient((function () use ($expectedJsonResponse) {
             yield function (string $method, string $url, array $options) {
                 $this->assertSame('POST', $method);
                 $this->assertSame('https://bsky.social/xrpc/com.atproto.server.createSession', $url);
@@ -299,21 +302,47 @@ final class BlueskyTransportTest extends TransportTestCase
                 ]]);
             };
 
-            yield function (string $method, string $url, array $options) {
+            yield function (string $method, string $url, array $options) use ($expectedJsonResponse) {
                 $this->assertSame('POST', $method);
                 $this->assertSame('https://bsky.social/xrpc/com.atproto.repo.createRecord', $url);
                 $this->assertArrayHasKey('authorization', $options['normalized_headers']);
-                $this->assertSame('{"repo":null,"collection":"app.bsky.feed.post","record":{"$type":"app.bsky.feed.post","text":"Hello World!","createdAt":"2024-04-28T08:40:17.000000Z","embed":{"$type":"app.bsky.embed.images","images":[{"alt":"A fixture","image":{"$type":"blob","ref":{"$link":"bafkreibabalobzn6cd366ukcsjycp4yymjymgfxcv6xczmlgpemzkz3cfa"},"mimeType":"image\/png","size":760898}}]}}}', $options['body']);
+                $this->assertSame($expectedJsonResponse, $options['body']);
 
                 return new JsonMockResponse(['cid' => '103254962155278888']);
             };
         })()));
 
-        $options = (new BlueskyOptions())
-            ->attachMedia(new File(__DIR__.'/fixtures.gif'), 'A fixture');
-        $result = $transport->send(new ChatMessage('Hello World!', $options));
+        $result = $transport->send(new ChatMessage('Hello World!', $blueskyOptions));
 
         $this->assertSame('103254962155278888', $result->getMessageId());
+    }
+
+    public static function sendMessageWithEmbedDataProvider(): iterable
+    {
+        yield 'With media' => [
+            'options' => (new BlueskyOptions())->attachMedia(new File(__DIR__.'/fixtures.gif'), 'A fixture'),
+            'expectedResponse' => '{"repo":null,"collection":"app.bsky.feed.post","record":{"$type":"app.bsky.feed.post","text":"Hello World!","createdAt":"2024-04-28T08:40:17.000000Z","embed":{"$type":"app.bsky.embed.images","images":[{"alt":"A fixture","image":{"$type":"blob","ref":{"$link":"bafkreibabalobzn6cd366ukcsjycp4yymjymgfxcv6xczmlgpemzkz3cfa"},"mimeType":"image\/png","size":760898}}]}}}',
+        ];
+
+        yield 'With website preview card and all optionnal informations' => [
+            'options' => (new BlueskyOptions())
+                ->attachCard(
+                    'https://example.com',
+                    new File(__DIR__.'/fixtures.gif'),
+                    'Fork me im famous',
+                    'Click here to go to website!'
+                ),
+            'expectedResponse' => '{"repo":null,"collection":"app.bsky.feed.post","record":{"$type":"app.bsky.feed.post","text":"Hello World!","createdAt":"2024-04-28T08:40:17.000000Z","embed":{"$type":"app.bsky.embed.external","external":{"uri":"https:\/\/example.com","title":"Fork me im famous","description":"Click here to go to website!","thumb":{"$type":"blob","ref":{"$link":"bafkreibabalobzn6cd366ukcsjycp4yymjymgfxcv6xczmlgpemzkz3cfa"},"mimeType":"image\/png","size":760898}}}}}',
+        ];
+
+        yield 'With website preview card and minimal information' => [
+            'options' => (new BlueskyOptions())
+                ->attachCard(
+                    'https://example.com',
+                    new File(__DIR__.'/fixtures.gif')
+                ),
+            'expectedResponse' => '{"repo":null,"collection":"app.bsky.feed.post","record":{"$type":"app.bsky.feed.post","text":"Hello World!","createdAt":"2024-04-28T08:40:17.000000Z","embed":{"$type":"app.bsky.embed.external","external":{"uri":"https:\/\/example.com","title":"","description":"","thumb":{"$type":"blob","ref":{"$link":"bafkreibabalobzn6cd366ukcsjycp4yymjymgfxcv6xczmlgpemzkz3cfa"},"mimeType":"image\/png","size":760898}}}}}',
+        ];
     }
 
     /**

@@ -38,7 +38,7 @@
         "composer/semver": "^3.0",
         "ext-xml": "*",
         "doctrine/event-manager": "^2",
-        "doctrine/persistence": "^3.1",
+        "doctrine/persistence": "^3.1|^4",
         "twig/twig": "^3.12",
         "psr/cache": "^2.0|^3.0",
         "psr/clock": "^1.0",

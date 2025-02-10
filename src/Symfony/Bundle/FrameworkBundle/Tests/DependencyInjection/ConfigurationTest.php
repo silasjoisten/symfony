@@ -775,6 +775,7 @@ class ConfigurationTest extends TestCase
                 'enable_attributes' => !class_exists(FullStack::class),
                 'static_method' => ['loadValidatorMetadata'],
                 'translation_domain' => 'validators',
+                'disable_translation' => false,
                 'mapping' => [
                     'paths' => [],
                 ],
@@ -922,6 +923,27 @@ class ConfigurationTest extends TestCase
                 'enabled' => !class_exists(FullStack::class) && class_exists(Mailer::class),
                 'message_bus' => null,
                 'headers' => [],
+                'dkim_signer' => [
+                    'enabled' => false,
+                    'options' => [],
+                    'key' => '',
+                    'domain' => '',
+                    'select' => '',
+                    'passphrase' => '',
+                ],
+                'smime_signer' => [
+                    'enabled' => false,
+                    'key' => '',
+                    'certificate' => '',
+                    'passphrase' => null,
+                    'extra_certificates' => null,
+                    'sign_options' => null,
+                ],
+                'smime_encrypter' => [
+                    'enabled' => false,
+                    'certificate' => '',
+                    'cipher' => null,
+                ],
             ],
             'notifier' => [
                 'enabled' => !class_exists(FullStack::class) && class_exists(Notifier::class),

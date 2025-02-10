@@ -62,6 +62,6 @@ class JsonEncoderTest extends AbstractWebTestCase
         static::getContainer()->get('json_encoder.cache_warmer.encoder_decoder.alias')->warmUp(static::getContainer()->getParameter('kernel.cache_dir'));
 
         $this->assertFileExists($encodersDir);
-        $this->assertCount(1, glob($encodersDir.'/*'));
+        $this->assertCount(2, glob($encodersDir.'/*'));
     }
 }

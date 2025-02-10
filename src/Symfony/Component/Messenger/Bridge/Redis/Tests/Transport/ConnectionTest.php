@@ -11,6 +11,7 @@
 
 namespace Symfony\Component\Messenger\Bridge\Redis\Tests\Transport;
 
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
 use Symfony\Component\Messenger\Exception\TransportException;
@@ -524,7 +525,7 @@ class ConnectionTest extends TestCase
         $connection->keepalive('redisid-123', 3000);
     }
 
-    private function createRedisMock(): \Redis
+    private function createRedisMock(): MockObject&\Redis
     {
         $redis = $this->createMock(\Redis::class);
         $redis->expects($this->any())

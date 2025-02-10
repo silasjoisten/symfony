@@ -6,7 +6,42 @@ backward compatibility breaks. Minor backward compatibility breaks are prefixed 
 `[BC BREAK]`, make sure your code is compatible with these entries before upgrading.
 Read more about this in the [Symfony documentation](https://symfony.com/doc/7.3/setup/upgrade_minor.html).
 
-If you're upgrading from a version below 7.1, follow the [7.2 upgrade guide](UPGRADE-7.2.md) first.
+If you're upgrading from a version below 7.2, follow the [7.2 upgrade guide](UPGRADE-7.2.md) first.
+
+Ldap
+----
+
+ * Deprecate `LdapUser::eraseCredentials()` in favor of `__serialize()`
+
+Security
+--------
+
+ * Deprecate `UserInterface::eraseCredentials()` and `TokenInterface::eraseCredentials()`,
+   erase credentials e.g. using `__serialize()` instead
+
+   *Before*
+   ```php
+   public function eraseCredentials(): void
+   {
+   }
+   ```
+
+   *After*
+   ```php
+   #[\Deprecated]
+   public function eraseCredentials(): void
+   {
+   }
+
+   // If your eraseCredentials() method was used to empty a "password" property:
+   public function __serialize(): array
+   {
+       $data = (array) $this;
+       unset($data["\0".self::class."\0password"]);
+
+       return $data;
+   }
+   ```
 
 Console
 -------
@@ -30,6 +65,8 @@ Console
    });
    ```
 
+ * Deprecate methods `Command::getDefaultName()` and `Command::getDefaultDescription()` in favor of the `#[AsCommand]` attribute
+
 FrameworkBundle
 ---------------
 
@@ -37,10 +74,76 @@ FrameworkBundle
    because its default value will change in version 8.0
  * Deprecate the `--show-arguments` option of the `container:debug` command, as arguments are now always shown
 
+
+SecurityBundle
+--------------
+
+ * Deprecate the `security.hide_user_not_found` config option in favor of `security.expose_security_errors`
+
 Serializer
 ----------
 
  * Deprecate the `CompiledClassMetadataFactory` and `CompiledClassMetadataCacheWarmer` classes
+
+Validator
+---------
+
+ * Deprecate defining custom constraints not supporting named arguments
+
+   Before:
+
+   ```php
+   use Symfony\Component\Validator\Constraint;
+
+   class CustomConstraint extends Constraint
+   {
+       public function __construct(array $options)
+       {
+           // ...
+       }
+   }
+   ```
+
+   After:
+
+   ```php
+   use Symfony\Component\Validator\Attribute\HasNamedArguments;
+   use Symfony\Component\Validator\Constraint;
+
+   class CustomConstraint extends Constraint
+   {
+       #[HasNamedArguments]
+       public function __construct($option1, $option2, $groups, $payload)
+       {
+           // ...
+       }
+   }
+   ```
+ * Deprecate passing an array of options to the constructors of the constraint classes, pass each option as a dedicated argument instead
+
+   Before:
+
+   ```php
+   new NotNull([
+       'groups' => ['foo', 'bar'],
+       'message' => 'a custom constraint violation message',
+   ])
+   ```
+
+   After:
+
+   ```php
+   new NotNull(
+       groups: ['foo', 'bar'],
+       message: 'a custom constraint violation message',
+   )
+   ```
+
+TypeInfo
+--------
+
+ * Deprecate constructing a `CollectionType` instance as a list that is not an array
+ * Deprecate the third `$asList` argument of `TypeFactoryTrait::iterable()`, use `TypeFactoryTrait::list()` instead
 
 VarDumper
 ---------
